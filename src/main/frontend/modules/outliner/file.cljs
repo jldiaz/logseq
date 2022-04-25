@@ -40,25 +40,27 @@
     (when-not config/publishing?
       (if (state/input-idle? (state/get-current-repo))
         (doseq [[repo page-id] (set pages)]
-          (try (do-write-file! repo page-id)
-               (catch js/Error e
-                 (notification/show!
-                  [:div
-                   [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                   "Error: " (str (gobj/get e "stack"))]
-                  :error)
-                 (log/error :file/write-file-error {:error e}))))
+          (when-not (db/db-only? repo)
+            (try (do-write-file! repo page-id)
+                 (catch js/Error e
+                   (notification/show!
+                    [:div
+                     [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+                     "Error: " (str (gobj/get e "stack"))]
+                    :error)
+                   (log/error :file/write-file-error {:error e})))))
         (doseq [page pages]
           (async/put! write-chan page))))))
 
 (defn sync-to-file
   [{page-db-id :db/id}]
-  (if (nil? page-db-id)
-    (notification/show!
-     "Write file failed, can't find the current page!"
-     :error)
-    (when-let [repo (state/get-current-repo)]
-      (async/put! write-chan [repo page-db-id]))))
+  (when-not (db/db-only?)
+    (if (nil? page-db-id)
+      (notification/show!
+       "Write file failed, can't find the current page!"
+       :error)
+      (when-let [repo (state/get-current-repo)]
+        (async/put! write-chan [repo page-db-id])))))
 
 (util/batch write-chan
             batch-write-interval
